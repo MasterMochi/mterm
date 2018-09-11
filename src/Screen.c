@@ -1,6 +1,6 @@
 /******************************************************************************/
 /* src/Screen.c                                                               */
-/*                                                                 2018/09/09 */
+/*                                                                 2018/09/12 */
 /* Copyright (C) 2018 Mochi.                                                  */
 /******************************************************************************/
 /******************************************************************************/
@@ -207,6 +207,7 @@ void ScreenOutput( char *pStr )
                 /* 改行コード */
                 
                 doLineFeed();
+                index++;
                 break;
                 
             default:
@@ -225,7 +226,7 @@ void ScreenOutput( char *pStr )
         }
         
         /* 改行チェック */
-        if ( gCursor.column > 80 ) {
+        if ( gCursor.column > MAX_COLUMN ) {
             /* 改行 */
             doLineFeed();
         }
@@ -254,7 +255,7 @@ static void doLineFeed( void )
     
     /* カーソル設定 */
     gCursor.row++;
-    gCursor.column;
+    gCursor.column = 1;
     
     /* 行番号上限チェック */
     if ( gCursor.row > MAX_ROW ) {
@@ -271,7 +272,7 @@ static void doLineFeed( void )
     }
     
     /* 行初期化 */
-    for ( column = 0; column < MAX_COLUMN; column++ ) {
+    for ( column = 1; column <= MAX_COLUMN; column++ ) {
         WriteScreen( gCursor.row, column, ' ', gCursor.attr );
     }
     
