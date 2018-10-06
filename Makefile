@@ -1,6 +1,6 @@
 #******************************************************************************#
 # Makefile                                                                     #
-#                                                                   2018/09/09 #
+#                                                                   2018/09/26 #
 # Copyright (C) 2018 Mochi.                                                    #
 #******************************************************************************#
 #******************************************************************************#
@@ -10,8 +10,9 @@
 PROG = mterm
 
 # ソースコード
-SRCS = main.c   \
-       Screen.c
+SRCS = main.c     \
+       Screen.c   \
+       Keyboard.c
 
 # ソースコードディレクトリ
 SRC_DIR = src
@@ -27,7 +28,7 @@ CFLAGS = -ffreestanding             \
          -static                    \
          -masm=intel                \
          -I../../kernel/src/include \
-         -I../driver-vga/src/
+         -I../drv-vga/src
 
 # LDフラグ
 LDFLAGS = -Tmterm.lds                         \

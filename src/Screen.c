@@ -1,6 +1,6 @@
 /******************************************************************************/
 /* src/Screen.c                                                               */
-/*                                                                 2018/09/12 */
+/*                                                                 2018/10/05 */
 /* Copyright (C) 2018 Mochi.                                                  */
 /******************************************************************************/
 /******************************************************************************/
@@ -14,6 +14,7 @@
 #include <kernel/library.h>
 
 /* モジュールヘッダ */
+#include "mterm.h"
 
 
 /******************************************************************************/
@@ -179,19 +180,20 @@ void ScreenInit( void )
  * @brief       画面出力
  * @details     画面出力を行う。
  * 
- * @param[in]   *pStr 文字列
+ * @param[in]   *pMsg メッセージ
  */
 /******************************************************************************/
-void ScreenOutput( char *pStr )
+void ScreenOutput( MtermMsgOutput_t *pMsg )
 {
+    char     *pStr; /* 出力文字列   */
     uint32_t index; /* インデックス */
-    uint32_t errNo; /* エラー番号 */
     
     /* 初期化 */
+    pStr  = ( char * ) pMsg->data;
     index = 0;
     
     /* 一文字毎に繰り返し */
-    while ( pStr[ index ] != '\0' ) {
+    while ( ( pStr[ index ] != '\0' ) && ( index < pMsg->header.length ) ) {
         /* 文字判定 */
         switch ( pStr[ index ] ) {
             case '\033':
@@ -233,7 +235,7 @@ void ScreenOutput( char *pStr )
     }
     
     /* 画面出力 */
-    MkMsgSend( 1, gScreen, sizeof ( gScreen ), &errNo );
+    MkMsgSend( 1, gScreen, sizeof ( gScreen ), NULL );
     
     return;
 }
