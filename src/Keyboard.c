@@ -1,19 +1,20 @@
 /******************************************************************************/
 /* src/Keyboard.c                                                             */
-/*                                                                 2018/10/05 */
+/*                                                                 2018/10/10 */
 /* Copyright (C) 2018 Mochi.                                                  */
 /******************************************************************************/
 /******************************************************************************/
 /* インクルード                                                               */
 /******************************************************************************/
 /* 共通ヘッダ */
-#include "mterm.h"
+#include <mtty.h>
 #include <stdbool.h>
 #include <string.h>
 #include <kernel/library.h>
 #include <MLib/Basic/MLibBasic.h>
 
 /* モジュールヘッダ */
+#include "mterm.h"
 #include "Screen.h"
 
 
@@ -174,7 +175,7 @@ const static ConvEntry_t gConvTbl[] = {
     /* ↓  */{ 0xE05000, "\e[B"  , "\e[B"  , NULL    , false },
     /* PgDn*/{ 0xE05100, "\e[6~" , "\e[6~" , NULL    , false },
     /* INS */{ 0xE05200, "\e[2~" , "\e[2~" , NULL    , false },
-    /* DEL */{ 0xE05300, "\e[3~" , "\e[3~" , NULL    , false }  };
+    /* DEL */{ 0xE05300, "\x7F"  , "\x7F"  , NULL    , false }  };
     /*-------+---------+---------+---------+---------+-------*/
     /* print | scan    | unshift | shift   | ctrl    | alt   */
     /*-------+---------+---------+---------+---------+-------*/
@@ -344,11 +345,13 @@ static bool ProcModifierKey( uint32_t scan )
 static void SendCode( char *pCode,
                       bool alt     )
 {
-    char   buffer[ 10 ];
-    size_t len;
+    char        buffer[ 20 ];
+    size_t      length;
+    MttyMsgInput_t *pMsg;
     
     /* 初期化 */
-    len   = 0;
+    length = 0;
+    pMsg   = ( MttyMsgInput_t * ) buffer;
     
     /* 変換コードチェック */
     if ( pCode == NULL ) {
@@ -358,14 +361,14 @@ static void SendCode( char *pCode,
     }
     
     /* コード長計算 */
-    len = strlen( pCode );
+    length = strlen( pCode );
     
     /* コード長判定 */
-    if ( len == 0 ) {
+    if ( length == 0 ) {
         /* コード長0 */
         
         /* コード長補正 */
-        len = 1;
+        length = 1;
     }
     
     /* alt修飾判定 */
@@ -374,20 +377,24 @@ static void SendCode( char *pCode,
         /* alt修飾有 */
         
         /* ESCコード設定 */
-        buffer[ 0 ] = '\e';
-        len++;
+        pMsg->data[ 0 ] = '\e';
+        length++;
         
         /* コード設定 */
-        strcpy( &buffer[ 1 ], pCode );
+        strcpy( &( pMsg->data[ 1 ] ), pCode );
         
     } else {
         /* alt修飾無 */
         
-        strcpy( buffer, pCode );
+        strcpy( pMsg->data, pCode );
     }
     
+    /* メッセージ設定 */
+    pMsg->header.funcId = MTTY_FUNC_INPUT;
+    pMsg->header.length = length;
+    
     /* コード送信 */
-    MkMsgSend( 4, buffer, len, NULL );
+    MkMsgSend( 4, pMsg, sizeof ( pMsg ) + length, NULL );
     
     return;
 }

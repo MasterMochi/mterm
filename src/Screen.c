@@ -1,12 +1,13 @@
 /******************************************************************************/
 /* src/Screen.c                                                               */
-/*                                                                 2018/10/05 */
+/*                                                                 2018/10/13 */
 /* Copyright (C) 2018 Mochi.                                                  */
 /******************************************************************************/
 /******************************************************************************/
 /* インクルード                                                               */
 /******************************************************************************/
 /* 共通ヘッダ */
+#include <drv-vga.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -109,12 +110,21 @@ static void WriteScreen( int32_t row,
                          uint8_t c,
                          uint8_t attr    );
 
+/* VRAM書込み */
+static void WriteVram( int32_t row,
+                       int32_t column,
+                       size_t  size    );
+
 
 /******************************************************************************/
 /* グローバル変数定義                                                         */
 /******************************************************************************/
 /* 画面バッファ */
 static uint8_t gScreen[ MAX_ROW ][ MAX_COLUMN ][ 2 ];
+
+/* VRAM書込みメッセージバッファ */
+static uint8_t          gMsgBuffer[ MK_MSG_SIZE_MAX ];
+static DrvVgaMsgWrite_t *pgMsg = ( DrvVgaMsgWrite_t * ) gMsgBuffer;
 
 /** テキスト制御情報 */
 static cursorInfo_t gCursor;
@@ -133,7 +143,7 @@ static escCsiTbl_t gEscCsiTbl[] = {
     { 'K', ProcEscapeCsiEl  },      /* 行消去                 */
     { 'f', ProcEscapeCsiCup },      /* カーソル移動（任意）   */
     { 'm', ProcEscapeCsiSgr },      /* 文字属性設定           */
-    { 0,   NULL              }  };  /* 終端                   */
+    { 0,   NULL             }  };   /* 終端                   */
 
 
 /******************************************************************************/
@@ -147,8 +157,8 @@ static escCsiTbl_t gEscCsiTbl[] = {
 /******************************************************************************/
 void ScreenInit( void )
 {
-    int32_t row;        /* 行番号     */
-    int32_t column;     /* 列番号     */
+    int32_t  row;       /* 行番号     */
+    int32_t  column;    /* 列番号     */
     uint32_t errNo;     /* エラー番号 */
     
     /* 初期化 */
@@ -164,12 +174,13 @@ void ScreenInit( void )
     /* 画面バッファ初期化 */
     for ( row = 1; row <= MAX_ROW; row++ ) {
         for ( column = 1; column <= MAX_COLUMN; column++ ) {
-            WriteScreen( row, column, ' ', gCursor.attr );
+            gScreen[ row - 1 ][ column - 1 ][ 0 ] = ' ';
+            gScreen[ row - 1 ][ column - 1 ][ 1 ] = gCursor.attr;
         }
     }
     
-    /* 画面出力 */
-    MkMsgSend( 1, gScreen, sizeof ( gScreen ), &errNo );
+    /* VRAM書込み */
+    WriteVram( 1, 1, MAX_ROW * MAX_COLUMN * 2 );
     
     return;
 }
@@ -208,7 +219,12 @@ void ScreenOutput( MtermMsgOutput_t *pMsg )
             case '\n':
                 /* 改行コード */
                 
+                /* 改行 */
                 doLineFeed();
+                
+                /* VRAM書込み */
+                WriteVram( 1, 1, MAX_ROW * MAX_COLUMN * 2 );
+                
                 index++;
                 break;
                 
@@ -234,8 +250,8 @@ void ScreenOutput( MtermMsgOutput_t *pMsg )
         }
     }
     
-    /* 画面出力 */
-    MkMsgSend( 1, gScreen, sizeof ( gScreen ), NULL );
+    /* VRAM書込み */
+    WriteVram( 1, 1, MAX_ROW * MAX_COLUMN * 2 );
     
     return;
 }
@@ -265,17 +281,17 @@ static void doLineFeed( void )
         
         gCursor.row = MAX_ROW;
         
-        /* 1行スクロール */
-        for ( row = 1; row < MAX_ROW; row++ ) {
-            memcpy( &gScreen[ row - 1 ][ 0 ][ 0 ],
-                    &gScreen[ row     ][ 0 ][ 0 ],
-                    MAX_COLUMN * 2                 );
-        }
-    }
-    
-    /* 行初期化 */
-    for ( column = 1; column <= MAX_COLUMN; column++ ) {
-        WriteScreen( gCursor.row, column, ' ', gCursor.attr );
+//        /* 1行スクロール */
+//        for ( row = 1; row < MAX_ROW; row++ ) {
+//            memcpy( &gScreen[ row - 1 ][ 0 ][ 0 ],
+//                    &gScreen[ row     ][ 0 ][ 0 ],
+//                    MAX_COLUMN * 2                 );
+//        }
+//        /* 行初期化 */
+//        for ( column = 1; column <= MAX_COLUMN; column++ ) {
+//            gScreen[ gCursor.row - 1 ][ column - 1 ][ 0 ] = ' ';
+//            gScreen[ gCursor.row - 1 ][ column - 1 ][ 1 ] = gCursor.attr;
+//        }
     }
     
     return;
@@ -386,17 +402,18 @@ static uint32_t ProcEscape( char *pStr )
     /* 初期化 */
     n      = 0;
     m      = 0;
+    index  = 0;
     tblIdx = 0;
     
     /* 制御シーケンス判定 */
-    if ( pStr[ 0 ] != '[' ) {
+    if ( pStr[ index++ ] != '[' ) {
         /* 非制御シーケンス */
         
         return 0;
     }
     
     /* パラメータ取得 */
-    index += GetEscapeCsiParam( pStr, &n, &m );
+    index += GetEscapeCsiParam( &pStr[ index ], &n, &m );
     
     /* 機能検索 */
     while ( gEscCsiTbl[ tblIdx ].code != 0 ) {
@@ -941,8 +958,37 @@ static void WriteScreen( int32_t row,
                          uint8_t c,
                          uint8_t attr    )
 {
+    /* 画面バッファ書込み */
     gScreen[ row - 1 ][ column - 1 ][ 0 ] = c;
     gScreen[ row - 1 ][ column - 1 ][ 1 ] = attr;
+    
+    return;
+}
+
+
+/******************************************************************************/
+/**
+ * @brief       VRAM書込み
+ * @details     画面バッファの指定した領域をVRAMに書き込む。
+ * 
+ * @param[in]   row    先頭位置の行番号
+ * @param[in]   column 先頭位置の列番号
+ * @param[in]   size   領域サイズ
+ */
+/******************************************************************************/
+static void WriteVram( int32_t row,
+                       int32_t column,
+                       size_t  size    )
+{
+    /* メッセージ設定 */
+    pgMsg->header.funcId = DRVVGA_FUNC_WRITE;
+    pgMsg->header.length = 0;                   /* 未使用 */
+    pgMsg->index         = ( row - 1 ) * MAX_COLUMN * 2 + ( column - 1 ) * 2;
+    pgMsg->size          = size;
+    memcpy( pgMsg->data, &gScreen[ row - 1 ][ column - 1 ][ 0 ], size );
+    
+    /* メッセージ送信 */
+    MkMsgSend( 1, pgMsg, sizeof ( DrvVgaMsgWrite_t ) + size, NULL );
     
     return;
 }
